@@ -1,0 +1,63 @@
+{
+  "redis": {
+    "host": "localhost",
+    "port": 6379,
+    "db": 1
+  },
+  "terminal_ui": {
+    "width": 600,
+    "height": 200,
+    "offset_x": 10,
+    "offset_y": 0,
+    "enable_realtime_log": true
+  },
+  "brokers": {
+    "TICKMILL": {
+      "path": "C:\\Program Files\\Tickmill MT5 Terminal\\terminal64.exe"
+    },
+    "EXNESS": {
+      "path": "C:\\Program Files\\Neotech Financial Services MT5 Terminal\\terminal64.exe"
+    },
+    "FXPRO": {
+      "path": "C:\\Program Files\\FxPro - MetaTrader 5\\terminal64.exe"
+    }
+  },
+  "super_matrix": {
+    "active_brokers": ["TICKMILL", "EXNESS", "FXPRO"],
+    "symbol_mapping": {
+      "TICKMILL": "XAUUSD",
+      "EXNESS": "XAUUSD",
+      "FXPRO": "GOLD"
+    },
+    "volume_mapping": {
+      "TICKMILL": 0.01,
+      "EXNESS": 0.01,
+      "FXPRO": 0.01
+    },
+    "chien_thuat": {
+      "stable_mode": "freeze",
+      "deviation_entry": 0.1,
+      "deviation_close": 0.03,
+      "stable_time": 300,
+      "cooldown_second": 60,
+      "cooldown_close_second": 3,
+      "hold_time": 180,
+      "alert_equity": 100,
+      "trading_hours": ["00:05-16:00", "16:10-19:30"],
+      "force_close_hours": ["20:00-20:05"],
+      "max_orphan_count": 3,
+      "orphan_cooldown_second": 1800
+    },
+    "quan_tri_rui_ro": {
+      "max_orders_per_broker": 8,
+      "max_concurrent_pairs": 4,
+      "max_tick_delay_second": 15.0
+    }
+  },
+  "vps_name": "VPS-MATRIX-01",
+  "telegram": {
+    "enable": false,
+    "bot_token": "TOKEN_CUA_DAI_CA",
+    "chat_id": "CHAT_ID_CUA_DAI_CA"
+  }
+}
