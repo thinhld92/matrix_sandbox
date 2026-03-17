@@ -197,8 +197,8 @@ try:
                     profit_base = tinh_profit_mo_phong(cap['open_price_base'], close_price_base, sim_lot, lenh_base)
                     profit_diff = tinh_profit_mo_phong(cap['open_price_diff'], close_price_diff, sim_lot, lenh_diff)
                     
-                    fee_base = sim_lot * commission_map.get(b_base, 0) * 2
-                    fee_diff = sim_lot * commission_map.get(b_diff, 0) * 2
+                    fee_base = sim_lot * commission_map.get(b_base, 0)
+                    fee_diff = sim_lot * commission_map.get(b_diff, 0)
                     
                     bien_lai = {
                         "pair_token": cap['id_cap'],
@@ -321,8 +321,8 @@ try:
                     profit_base = tinh_profit_mo_phong(cap['open_price_base'], close_price_base, sim_lot, lenh_base)
                     profit_diff = tinh_profit_mo_phong(cap['open_price_diff'], close_price_diff, sim_lot, lenh_diff)
                     
-                    fee_base = round(sim_lot * commission_map.get(b_base, 0) * 2, 2)
-                    fee_diff = round(sim_lot * commission_map.get(b_diff, 0) * 2, 2)
+                    fee_base = round(sim_lot * commission_map.get(b_base, 0), 2)
+                    fee_diff = round(sim_lot * commission_map.get(b_diff, 0), 2)
                     
                     net_profit = profit_base + profit_diff - fee_base - fee_diff
                     
