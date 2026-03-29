@@ -3,7 +3,7 @@ import ujson as json
 import time
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 import ctypes
 
 os.system("title 👓 KẾ TOÁN TRƯỞNG TỔNG HỢP - SANDBOX")
@@ -47,7 +47,6 @@ print("Đang lắng nghe biên lai mô phỏng...")
 
 while True:
     try:
-        now_sec = time.time()
 
         # Kiểm tra tín hiệu tắt máy từ Redis
         if r.get("SIGNAL:SHUTDOWN"):
@@ -59,7 +58,7 @@ while True:
         if data_raw:
             bien_lai = json.loads(data_raw[1])
             
-            pair_token = bien_lai.get("pair_token", "UNKNOWN")
+
             pair_id = bien_lai.get("pair_id", "UNKNOWN")
             action_type = bien_lai.get("action_type", "CLOSE")
             huong = bien_lai.get("huong", "")
@@ -119,7 +118,7 @@ while True:
                         ])
                     
                     writer.writerow([
-                        datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                        datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S'),
                         pair_id, action_type, huong, volume,
                         b_base, b_diff,
                         f"{chenh_vao:.2f}", f"{entry_live:.2f}",
@@ -137,6 +136,7 @@ while True:
             except PermissionError:
                 print(f"⚠️ LỖI: Hãy đóng file Excel {ten_file_csv} để Kế Toán ghi sổ! Đang chờ...")
                 running_balance -= net_profit  # Hoàn lại balance vì chưa ghi được
+                r.rpush("QUEUE:ACCOUNTANT", data_raw[1])  # Đẩy biên lai lại queue để thử lại
                 time.sleep(3)
 
     except Exception as e:

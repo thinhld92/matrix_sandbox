@@ -48,7 +48,7 @@ print(f"  ┣ ⏱️ Cooldown Mở: {chien_thuat.get('cooldown_second')}s | Cool
 print(f"  ┣ 👻 Diệt Tick Ma (Feed Timeout): Quá {quan_tri.get('max_tick_delay_second', 15.0)}s")
 print(f"  ┣ 💰 Lot mô phỏng: {sim_lot} | Balance: {sim_cfg.get('initial_balance', 10000.0)}$")
 print(f"  ┣ 💸 Commission: {commission_map}")
-print(f"  ┗ ⚔️ Tối đa {quan_tri.get('max_concurrent_pairs')} Cặp song song | {quan_tri.get('max_orders_per_broker')} Lệnh/Sàn")
+print(f"  ┗ ⚔️ Tối đa {quan_tri.get('max_concurrent_pairs')} Cặp song song | {quan_tri.get('max_orders_per_pair')} Lệnh/Cặp")
 print("=" * 60)
 
 danh_sach_cap_cheo = list(itertools.combinations(active_brokers, 2))
@@ -87,8 +87,6 @@ def tinh_profit_mo_phong(open_price, close_price, volume, huong_lenh):
 # ==========================================
 KEY_STATE = "STATE:SUPER_MASTER"
 
-dong_ho_vao = {}        
-dong_ho_dong = {}       
 thoi_diem_nhan_tick_cuoi = {} 
 
 lich_su_vao_lenh = []       
@@ -128,12 +126,12 @@ last_time_update = 0
 current_utc_time_str = "00:00"
 
 # ==========================================
-# HÀM ĐẾM LỆNH MÔ PHỎNG ĐANG MỞ THEO BROKER
+# HÀM ĐẾM LỆNH MÔ PHỎNG ĐANG MỞ THEO CẶP
 # ==========================================
-def dem_lenh_mo_phong(broker):
+def dem_lenh_theo_cap(pair_group):
     count = 0
     for cap in lich_su_vao_lenh:
-        if cap['base'] == broker or cap['diff'] == broker:
+        if cap['pair_group'] == pair_group:
             count += 1
     return count
 
@@ -166,17 +164,21 @@ try:
         if gio_cam_bat_buoc_dong:
             if len(lich_su_vao_lenh) > 0:
                 print(f"\n🛑 [GIỜ GIỚI NGHIÊM] Đã điểm {current_utc_time_str}! XẢ TOÀN BỘ CẶP MÔ PHỎNG!")
+                
+                # Gom tất cả tick 1 lần duy nhất
+                brokers_can_tick = list({b for cap in lich_su_vao_lenh for b in (cap['base'], cap['diff'])})
+                tick_keys = [f"TICK:{b}:{symbol_map.get(b, '').upper()}" for b in brokers_can_tick]
+                tick_raws = r.mget(tick_keys)
+                tick_cache = {}
+                for i, b in enumerate(brokers_can_tick):
+                    tick_cache[b] = json.loads(tick_raws[i]) if tick_raws[i] else None
+                
                 for cap in lich_su_vao_lenh:
                     b_base, b_diff = cap['base'], cap['diff']
                     pair_group = cap['pair_group']
                     
-                    # Lấy tick hiện tại để tính giá đóng
-                    tick_base_key = f"TICK:{b_base}:{symbol_map.get(b_base, '').upper()}"
-                    tick_diff_key = f"TICK:{b_diff}:{symbol_map.get(b_diff, '').upper()}"
-                    tick_base_raw, tick_diff_raw = r.mget([tick_base_key, tick_diff_key])
-                    
-                    tick_base = json.loads(tick_base_raw) if tick_base_raw else None
-                    tick_diff = json.loads(tick_diff_raw) if tick_diff_raw else None
+                    tick_base = tick_cache.get(b_base)
+                    tick_diff = tick_cache.get(b_diff)
                     
                     if not tick_base or not tick_diff:
                         continue
@@ -269,7 +271,6 @@ try:
                 
             san_data[broker] = {
                 "tick": tick_obj, 
-                "so_lenh_mo_phong": dem_lenh_mo_phong(broker),
                 "speed_60s": tick_obj.get("speed_60s", 0) if tick_obj else 0
             }
 
@@ -297,11 +298,6 @@ try:
             tin_hieu = check_tin_hieu_arbitrage(tick_base, tick_diff, chien_thuat, huong_dang_danh=cap['huong'])
             
             if tin_hieu["hanh_dong"] == "DONG_LENH":
-                if dong_ho_dong.get(pair_group, 0) == 0: 
-                    dong_ho_dong[pair_group] = time.time()
-                
-                dong_ho_vao[pair_group] = 0 
-                
                 # FREEZE mode ONLY: Tính từ tick cuối cùng
                 stable_sec = chien_thuat['stable_time'] / 1000.0
                 tg_ngam_dong = time.time() - thoi_diem_nhan_tick_cuoi[pair_group]
@@ -353,13 +349,10 @@ try:
                     }
                     r.lpush("QUEUE:ACCOUNTANT", json.dumps(bien_lai))
                     
-                    dong_ho_dong[pair_group] = 0
                     thoi_diem_dong_lenh_cuoi_map[pair_group] = time.time() 
                 else: 
                     danh_sach_chua_chot.append(cap)
             else:
-                if dong_ho_dong.get(pair_group, 0) != 0:
-                    dong_ho_dong[pair_group] = 0
                 danh_sach_chua_chot.append(cap)
         
         if len(lich_su_vao_lenh) != len(danh_sach_chua_chot):
@@ -391,11 +384,6 @@ try:
                 
                 if tin_hieu["hanh_dong"] == "VAO_LENH":
                     if huong_hien_tai is not None and huong_hien_tai != tin_hieu["loai_lenh"]: continue 
-
-                    if dong_ho_vao.get(pair_group, 0) == 0: 
-                        dong_ho_vao[pair_group] = time.time()
-
-                    dong_ho_dong[pair_group] = 0
                     
                     # FREEZE mode ONLY
                     stable_sec = chien_thuat['stable_time'] / 1000.0
@@ -406,11 +394,9 @@ try:
                             "pair_group": pair_group, "broker_base": b_base, "broker_diff": b_diff,
                             "chi_tiet": tin_hieu, "chenh_lech": tin_hieu["chenh_lech"]
                         })
-                else:
-                    dong_ho_vao[pair_group] = 0; dong_ho_dong[pair_group] = 0
 
         # ----------------------------------------------------
-        # 5. RANK & MÔ PHỎNG FILL NGAY LẬP TỨC
+        # 5. RANK & CHỌN TOP SPREAD ĐỂ FILL
         # ----------------------------------------------------
         if tin_hieu_kha_thi:
             tin_hieu_kha_thi.sort(key=lambda x: x["chenh_lech"], reverse=True)
@@ -418,9 +404,8 @@ try:
             for th in tin_hieu_kha_thi:
                 b_base, b_diff, pair_group = th["broker_base"], th["broker_diff"], th["pair_group"]
                 
-                # Kiểm tra max lệnh mô phỏng
-                if san_data[b_base]["so_lenh_mo_phong"] >= quan_tri["max_orders_per_broker"]: continue 
-                if san_data[b_diff]["so_lenh_mo_phong"] >= quan_tri["max_orders_per_broker"]: continue 
+                # Kiểm tra max lệnh mô phỏng per-pair
+                if dem_lenh_theo_cap(pair_group) >= quan_tri["max_orders_per_pair"]: continue 
                 
                 tick_base, tick_diff = san_data[b_base]["tick"], san_data[b_diff]["tick"]
                 lenh_base, lenh_diff = th["chi_tiet"]["lenh_base"], th["chi_tiet"]["lenh_diff"]
@@ -457,13 +442,8 @@ try:
                 
                 print(f"\n⚡ BÓP CÒ MÔ PHỎNG: {b_base} ({lenh_base} @ {fill_price_base:.3f}) <-> {b_diff} ({lenh_diff} @ {fill_price_diff:.3f}) | Lệch: {th['chenh_lech']:.2f}")
                 
-                san_data[b_base]["so_lenh_mo_phong"] += 1
-                san_data[b_diff]["so_lenh_mo_phong"] += 1
-                
                 huong_dang_danh_map[pair_group] = th["chi_tiet"]["loai_lenh"]
                 thoi_diem_vao_lenh_cuoi_map[pair_group] = time.time()
-                
-                dong_ho_vao[pair_group] = 0
                 luu_tri_nho()
                 
                 so_cap_da_ban += 1
