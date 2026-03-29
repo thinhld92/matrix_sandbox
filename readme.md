@@ -56,6 +56,15 @@ Phiên bản kế thừa từ **Matrix Hedger**, chuyển đổi sang hướng *
 3. **Memurai / Redis** — localhost:6379.
 4. **Thư viện**: `pip install redis MetaTrader5 requests ujson hiredis`
 
+**Câu lệnh cài phụ thuộc:**
+```bash
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+**Windows nhanh:** nhay dup `setup_venv.bat` de tao `venv` va cai goi tu dong.
+`start_bots.bat` va `stop_bots.bat` uu tien dung `venv`, neu chua co se fallback sang Python global hoac `py -3`.
+
 ---
 
 ## 🚀 Khởi Chạy
