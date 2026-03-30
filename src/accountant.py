@@ -7,11 +7,14 @@ import ctypes
 import redis
 import ujson as json
 
+from utils.terminal import dan_tran_cua_so
+
 os.system("title KETOAN TRUONG TONG HOP - SANDBOX")
 try:
     ctypes.windll.kernel32.SetConsoleTitleW("KETOAN SANDBOX")
 except:
     pass
+dan_tran_cua_so(5)
 
 with open("config.json", "r", encoding="utf-8") as f:
     config = json.load(f)

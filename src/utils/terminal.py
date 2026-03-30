@@ -1,64 +1,176 @@
 import ctypes
-# import json
 import os
+
 import ujson as json
+
+
+class RECT(ctypes.Structure):
+    _fields_ = [
+        ("left", ctypes.c_long),
+        ("top", ctypes.c_long),
+        ("right", ctypes.c_long),
+        ("bottom", ctypes.c_long),
+    ]
+
 
 def chong_boi_den_terminal():
     """
-    Tắt chế độ QuickEdit của Windows Console để chống pause tiến trình khi click chuột.
+    Tat QuickEdit mode de tranh pause terminal khi click chuot.
     """
-    if os.name == 'nt': # Chỉ áp dụng cho Windows
+    if os.name != "nt":
+        return
+
+    try:
+        kernel32 = ctypes.windll.kernel32
+        std_input_handle = -10
+        handle = kernel32.GetStdHandle(std_input_handle)
+
+        enable_quick_edit_mode = 0x0040
+
+        mode = ctypes.c_uint32()
+        kernel32.GetConsoleMode(handle, ctypes.byref(mode))
+        mode.value &= ~enable_quick_edit_mode
+        kernel32.SetConsoleMode(handle, mode)
+    except Exception:
+        pass
+
+
+def lay_vung_lam_viec():
+    """
+    Lay work area cua Windows de tranh de cua so de len taskbar.
+    """
+    user32 = ctypes.windll.user32
+
+    try:
+        spi_get_work_area = 48
+        rect = RECT()
+        if user32.SystemParametersInfoW(spi_get_work_area, 0, ctypes.byref(rect), 0):
+            return rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top
+    except Exception:
+        pass
+
+    return 0, 0, user32.GetSystemMetrics(0), user32.GetSystemMetrics(1)
+
+
+def tai_cau_hinh_ui():
+    ui_cfg = {}
+    try:
+        with open("config.json", "r", encoding="utf-8") as f:
+            config = json.load(f)
+            ui_cfg = config.get("terminal_ui", {})
+    except Exception as e:
+        print(f"Canh bao: Loi doc giao dien tu config: {e}. Dang dung mac dinh.")
+    return ui_cfg
+
+
+def move_window(hwnd, x, y, width, height):
+    user32 = ctypes.windll.user32
+    user32.MoveWindow(hwnd, int(x), int(y), int(width), int(height), True)
+
+
+def dat_layout_ba_cot(hwnd, ui_cfg, role):
+    """
+    Layout theo 3 cot:
+    - 2 cot ben trai cho workers
+    - cot ben phai: master o tren, accountant o duoi
+    """
+    if role not in {"worker", "master", "accountant"}:
+        return False
+
+    left, top, screen_width, screen_height = lay_vung_lam_viec()
+
+    offset_x = ui_cfg.get("offset_x", 10)
+    offset_y = ui_cfg.get("offset_y", 0)
+    gap_x = ui_cfg.get("gap_x", 10)
+    gap_y = ui_cfg.get("gap_y", 10)
+
+    usable_width = max(600, screen_width - (offset_x * 2) - (gap_x * 2))
+    usable_height = max(400, screen_height - (offset_y * 2))
+    col_width = max(220, usable_width // 3)
+
+    x0 = left + offset_x
+    x1 = x0 + col_width + gap_x
+    x2 = x1 + col_width + gap_x
+    top_y = top + offset_y
+
+    if role == "worker":
+        worker_index_env = os.environ.get("MATRIX_WORKER_INDEX", "0")
+        worker_count_env = os.environ.get("MATRIX_WORKER_COUNT", "1")
         try:
-            kernel32 = ctypes.windll.kernel32
-            # Bắt handle của cửa sổ Input
-            STD_INPUT_HANDLE = -10
-            handle = kernel32.GetStdHandle(STD_INPUT_HANDLE)
-            
-            # Cờ QuickEdit Mode trong Windows API là 0x0040
-            ENABLE_QUICK_EDIT_MODE = 0x0040
-            
-            # Lấy chế độ hiện tại
-            mode = ctypes.c_uint32()
-            kernel32.GetConsoleMode(handle, ctypes.byref(mode))
-            
-            # Xóa cờ QuickEdit (Bitwise NOT)
-            mode.value &= ~ENABLE_QUICK_EDIT_MODE
-            
-            # Lưu lại chế độ mới
-            kernel32.SetConsoleMode(handle, mode)
-        except Exception as e:
-            pass
+            worker_index = max(0, int(worker_index_env))
+        except ValueError:
+            worker_index = 0
+        try:
+            worker_count = max(1, int(worker_count_env))
+        except ValueError:
+            worker_count = 1
+
+        worker_columns = 2
+        worker_rows = max(1, (worker_count + worker_columns - 1) // worker_columns)
+        worker_height = max(140, (usable_height - ((worker_rows - 1) * gap_y)) // worker_rows)
+
+        worker_col = worker_index % worker_columns
+        worker_row = worker_index // worker_columns
+        x = x0 if worker_col == 0 else x1
+        y = top_y + worker_row * (worker_height + gap_y)
+        move_window(hwnd, x, y, col_width, worker_height)
+        return True
+
+    panel_height = max(180, (usable_height - gap_y) // 2)
+    x = x2
+    y = top_y if role == "master" else top_y + panel_height + gap_y
+    move_window(hwnd, x, y, col_width, panel_height)
+    return True
+
+
+def dat_layout_mac_dinh(hwnd, ui_cfg, slot):
+    chieu_rong = ui_cfg.get("width", 1000)
+    chieu_cao = ui_cfg.get("height", 250)
+    toa_do_x = ui_cfg.get("offset_x", 10)
+    offset_y = ui_cfg.get("offset_y", 0)
+    gap_x = ui_cfg.get("gap_x", 10)
+    gap_y = ui_cfg.get("gap_y", 10)
+    so_cot = ui_cfg.get("columns", 0)
+
+    left, top, screen_width, _screen_height = lay_vung_lam_viec()
+    buoc_x = max(1, chieu_rong + gap_x)
+    buoc_y = max(1, chieu_cao + gap_y)
+
+    if so_cot <= 0:
+        kha_dung = max(chieu_rong, screen_width - toa_do_x)
+        so_cot = max(1, kha_dung // buoc_x)
+
+    slot_index = max(1, slot) - 1
+    cot = slot_index % so_cot
+    hang = slot_index // so_cot
+
+    x = left + toa_do_x + cot * buoc_x
+    y = top + offset_y + hang * buoc_y
+    move_window(hwnd, x, y, chieu_rong, chieu_cao)
+
 
 def dan_tran_cua_so(vi_tri_hang):
+    """
+    Dat cua so terminal vao mot slot tren man hinh.
+    Neu co bien moi truong MATRIX_WINDOW_SLOT thi uu tien dung slot do.
+    """
     chong_boi_den_terminal()
-    """
-    Ép vị trí cửa sổ Terminal xếp chồng từ trên xuống dưới.
-    Đọc kích thước từ file config.json ở thư mục gốc.
-    vi_tri_hang: 1 (Telegram), 2 (Base), 3 (Diff), 4 (Master)
-    """
+
     hwnd = ctypes.windll.kernel32.GetConsoleWindow()
     if not hwnd:
         return
 
-    # Khai báo kích thước mặc định
-    chieu_rong = 1000  
-    chieu_cao = 250    
-    toa_do_x = 10      
-    offset_y = 0
-
-    # Đọc siêu ngắn gọn y hệt Worker (Vì CWD đang ở thư mục gốc)
+    ui_cfg = tai_cau_hinh_ui()
+    slot_env = os.environ.get("MATRIX_WINDOW_SLOT")
     try:
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.load(f)
-            if 'terminal_ui' in config:
-                ui_cfg = config['terminal_ui']
-                chieu_rong = ui_cfg.get('width', chieu_rong)
-                chieu_cao = ui_cfg.get('height', chieu_cao)
-                toa_do_x = ui_cfg.get('offset_x', toa_do_x)
-                offset_y = ui_cfg.get('offset_y', offset_y)
-    except Exception as e:
-        print(f"⚠️ Lỗi đọc giao diện từ config: {e}. Đang dùng kích thước mặc định.")
+        slot = int(slot_env) if slot_env else int(vi_tri_hang)
+    except (TypeError, ValueError):
+        slot = int(vi_tri_hang)
 
-    # Tính toán và Ép khung Windows
-    toa_do_y = offset_y + (vi_tri_hang - 1) * chieu_cao 
-    ctypes.windll.user32.MoveWindow(hwnd, toa_do_x, toa_do_y, chieu_rong, chieu_cao, True)
+    layout_mode = os.environ.get("MATRIX_WINDOW_LAYOUT", ui_cfg.get("layout_mode", "grid"))
+    role = os.environ.get("MATRIX_WINDOW_ROLE", "")
+
+    if layout_mode == "three_panel" and dat_layout_ba_cot(hwnd, ui_cfg, role):
+        return
+
+    dat_layout_mac_dinh(hwnd, ui_cfg, slot)

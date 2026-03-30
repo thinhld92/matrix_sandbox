@@ -9,6 +9,9 @@
     "height": 200,
     "offset_x": 10,
     "offset_y": 0,
+    "gap_x": 10,
+    "gap_y": 10,
+    "columns": 3,
     "enable_realtime_log": true
   },
   "brokers": {
